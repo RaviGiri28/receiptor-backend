@@ -1,0 +1,10 @@
+# Files NOT uploaded by `gcloud app deploy`.
+.gcloudignore
+.git
+.gitignore
+node_modules/
+uploads/
+# Local dev settings; production values come from env.yaml
+.env
+.env.example
+env.example.yaml

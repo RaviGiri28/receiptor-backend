@@ -1,0 +1,34 @@
+# Google App Engine Standard, kept inside the free tier (28 F1 instance-hours/day).
+# Deploy from this folder:  npm run build:frontend  &&  gcloud app deploy
+runtime: nodejs22
+instance_class: F1
+
+automatic_scaling:
+  min_instances: 0
+  max_instances: 1
+
+# Secrets and DB settings live in env.yaml (not committed); copy env.example.yaml to start.
+includes:
+  - env.yaml
+
+handlers:
+  # API -> Express (server.js)
+  - url: /api/.*
+    script: auto
+    secure: always
+
+  # Vite build output, served by App Engine directly (uses no instance hours)
+  - url: /assets
+    static_dir: public/assets
+    secure: always
+
+  - url: /(.*\.(js|css|png|jpg|jpeg|gif|svg|ico|webp|txt|json|webmanifest|woff2?))$
+    static_files: public/\1
+    upload: public/.*\.(js|css|png|jpg|jpeg|gif|svg|ico|webp|txt|json|webmanifest|woff2?)$
+    secure: always
+
+  # Everything else is a React Router page
+  - url: /.*
+    static_files: public/index.html
+    upload: public/index.html
+    secure: always
