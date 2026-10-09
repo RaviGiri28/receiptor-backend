@@ -2,6 +2,9 @@ const { DataSource } = require("typeorm");
 const User = require("../entity/User");
 const Receipt = require('../entity/Receipt');
 const SupportTicket = require('../entity/SupportTicket');
+const BlogPost = require('../entity/BlogPost');
+const Announcement = require('../entity/Announcement');
+const NotificationRead = require('../entity/NotificationRead');
 require('dotenv').config();
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -22,7 +25,7 @@ const AppDataSource = new DataSource({
     // and never runs in production; use the SQL files in migrations/ instead.
     synchronize: !isProduction && process.env.DB_SYNCHRONIZE === 'true',
     logging: process.env.DB_LOGGING === 'true',
-    entities: [User, Receipt, SupportTicket],
+    entities: [User, Receipt, SupportTicket, BlogPost, Announcement, NotificationRead],
 });
 
 module.exports = { AppDataSource };

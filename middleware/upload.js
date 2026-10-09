@@ -26,4 +26,11 @@ const upload = multer({
     limits: { fileSize: 2 * 1024 * 1024 },
 });
 
+// Blog cover and inline images: larger than logos.
+upload.blogImage = multer({
+    storage,
+    fileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 },
+});
+
 module.exports = upload;

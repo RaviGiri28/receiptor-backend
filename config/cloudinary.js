@@ -19,24 +19,25 @@ const isConfigured = () => {
     return Boolean(cloud_name && api_key && api_secret);
 };
 
+const BLOG_FOLDER = process.env.CLOUDINARY_BLOG_FOLDER || 'receiptor/blog';
+
 // Uploads an image buffer; resolves to { url, publicId }.
-const uploadLogo = (buffer) => new Promise((resolve, reject) => {
+const uploadImage = (buffer, { folder, maxSize, label }) => new Promise((resolve, reject) => {
     if (!isConfigured()) {
-        const err = new Error('Logo storage is not configured');
+        const err = new Error(`${label} storage is not configured`);
         err.status = 503;
         return reject(err);
     }
     const stream = cloudinary.uploader.upload_stream(
         {
-            folder: LOGO_FOLDER,
+            folder,
             resource_type: 'image',
-            // Logos are shown at ~40px on receipts; cap the stored size.
-            transformation: [{ width: 512, height: 512, crop: 'limit' }],
+            transformation: [{ width: maxSize, height: maxSize, crop: 'limit' }],
         },
         (err, result) => {
             if (err) {
                 // Cloudinary rejects files that aren't real images.
-                const wrapped = new Error(err.http_code === 400 ? 'Invalid image file' : 'Logo upload failed');
+                const wrapped = new Error(err.http_code === 400 ? 'Invalid image file' : `${label} upload failed`);
                 wrapped.status = err.http_code === 400 ? 400 : 502;
                 wrapped.cause = err;
                 return reject(wrapped);
@@ -47,8 +48,14 @@ const uploadLogo = (buffer) => new Promise((resolve, reject) => {
     stream.end(buffer);
 });
 
+// Logos are shown at ~40px on receipts; cap the stored size.
+const uploadLogo = (buffer) => uploadImage(buffer, { folder: LOGO_FOLDER, maxSize: 512, label: 'Logo' });
+
+// Blog covers and inline images are shown up to page width.
+const uploadBlogImage = (buffer) => uploadImage(buffer, { folder: BLOG_FOLDER, maxSize: 1600, label: 'Image' });
+
 // Best effort: a failed cleanup shouldn't fail the user's request.
-const deleteLogo = async (publicId) => {
+const deleteImage = async (publicId) => {
     if (!publicId || !isConfigured()) return;
     try {
         await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
@@ -57,4 +64,6 @@ const deleteLogo = async (publicId) => {
     }
 };
 
-module.exports = { isConfigured, uploadLogo, deleteLogo };
+const deleteLogo = deleteImage;
+
+module.exports = { isConfigured, uploadLogo, deleteLogo, uploadBlogImage, deleteImage };

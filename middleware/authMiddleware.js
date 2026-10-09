@@ -18,7 +18,7 @@ const protect = async (req, res, next) => {
         // Reject tokens of deleted users and tokens issued before the last password change.
         const user = await AppDataSource.getRepository(User).findOne({
             where: { id: decoded.id },
-            select: ['id', 'password_changed_at'],
+            select: ['id', 'email', 'password_changed_at'],
         });
         if (!user) {
             return res.status(401).json({message: 'Invalid or expired token.'});
@@ -26,7 +26,8 @@ const protect = async (req, res, next) => {
         if (user.password_changed_at && Math.floor(user.password_changed_at.getTime() / 1000) > decoded.iat) {
             return res.status(401).json({message: 'Session expired. Please log in again.'});
         }
-        req.user = decoded;
+        // Email from the database, not the token, so admin checks use the current account.
+        req.user = { ...decoded, email: user.email };
         next();
     } catch (err) {
         next(err);

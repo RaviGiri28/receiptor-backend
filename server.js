@@ -11,10 +11,18 @@ const { verifyMailer } = require('./config/mailer');
 const authRoutes = require('./routes/authRoutes');
 const receiptRoutes = require('./routes/receiptRoutes');
 const supportRoutes = require('./routes/supportRoutes');
+const blogRoutes = require('./routes/blogRoutes');
+const announcementRoutes = require('./routes/announcementRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 if (!process.env.JWT_SECRET) {
     console.error('JWT_SECRET is not set');
     process.exit(1);
+}
+
+if (!process.env.ADMIN_EMAILS) {
+    console.warn('ADMIN_EMAILS is not set: nobody can publish blog posts or announcements.');
 }
 
 if (!cloudinaryConfigured()) {
@@ -44,6 +52,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/receipts', receiptRoutes);
 app.use('/api/support', supportRoutes);
+app.use('/api/blog', blogRoutes);
+app.use('/api/announcements', announcementRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/', (req, res) => {
     res.send("Backend Running");

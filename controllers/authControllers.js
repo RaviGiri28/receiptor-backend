@@ -5,6 +5,7 @@ const joi = require('joi');
 const { validate } = require('../middleware/validation');
 const jwt = require('jsonwebtoken');
 const { uploadLogo, deleteLogo } = require('../config/cloudinary');
+const { isAdminEmail } = require('../config/admin');
 
 // Upload errors carry a status (400 bad image, 502 Cloudinary down, 503 not configured).
 const uploadErrorResponse = (res, err) => {
@@ -115,6 +116,7 @@ const login = async (req, res) => {
                 email: user.email,
                 business_name: user.business_name,
                 business_logo: user.business_logo,
+                is_admin: isAdminEmail(user.email),
             }
         });
     } catch (err) {
@@ -152,7 +154,7 @@ const getProfile = async (req, res) => {
 
         return res.status(200).json({
             message: 'Profile fetched Successfully',
-            user
+            user: { ...user, is_admin: isAdminEmail(user.email) },
         });
     } catch (err) {
         console.error('Get profile error:', err);
@@ -223,6 +225,7 @@ const updateProfile = async (req, res) => {
                 business_phone: updateUser.business_phone,
                 business_logo: updateUser.business_logo,
                 custom_field_defs: updateUser.custom_field_defs,
+                is_admin: isAdminEmail(updateUser.email),
             }
         });
     } catch (err) {

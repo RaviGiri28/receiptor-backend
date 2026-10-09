@@ -68,6 +68,12 @@ const User = new EntitySchema({
             nullable:true,
             default:null,
         },
+        // "Mark all as read": notifications published before this are read.
+        notifications_cleared_at:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
         created_at:{
             type:'timestamp',
             createDate:true,
