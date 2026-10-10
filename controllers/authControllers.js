@@ -6,6 +6,12 @@ const { validate } = require('../middleware/validation');
 const jwt = require('jsonwebtoken');
 const { uploadLogo, deleteLogo } = require('../config/cloudinary');
 const { isAdminEmail } = require('../config/admin');
+const { TERMS_VERSION, DAY_MS, DELETION_GRACE_DAYS } = require('../config/legal');
+
+const deletionDate = (user) => new Date(new Date(user.deletion_requested_at).getTime() + DELETION_GRACE_DAYS * DAY_MS);
+
+// The user is back: restart the inactivity clock and forget any inactivity emails sent.
+const activitySnapshot = () => ({ last_active_at: new Date(), inactivity_notice_at: null, inactivity_reminder_at: null });
 
 // Upload errors carry a status (400 bad image, 502 Cloudinary down, 503 not configured).
 const uploadErrorResponse = (res, err) => {
@@ -26,6 +32,11 @@ const registerSchema = joi.object({
     business_name: joi.string().max(150).required().label('Business name'),
     business_address: joi.string().max(500).required().label('Business address'),
     business_phone: joi.string().min(7).max(20).required().label('Business phone'),
+    // Multipart forms send booleans as text.
+    accept_terms: joi.boolean().truthy('true').valid(true).required().label('Acceptance of the Terms and Privacy Policy')
+        .messages({ 'any.only': 'Please accept the Terms and Privacy Policy', 'any.required': 'Please accept the Terms and Privacy Policy' }),
+    terms_version: joi.string().valid(TERMS_VERSION).required().label('Terms version')
+        .messages({ 'any.only': 'The Terms have been updated. Please reload the page and accept them again.' }),
 });
 
 const register = async (req, res) => {
@@ -65,6 +76,9 @@ const register = async (req, res) => {
             business_phone,
             business_logo: logo && logo.url,
             business_logo_public_id: logo && logo.publicId,
+            terms_version: TERMS_VERSION,
+            terms_accepted_at: new Date(),
+            last_active_at: new Date(),
         });
 
         let savedUser;
@@ -106,6 +120,19 @@ const login = async (req, res) => {
         if (!isPasswordValid) {
             return res.status(401).json({ message: 'Invalid email or password' });
         }
+        // A deleted account in its recovery period: the client offers to restore it.
+        if (user.deletion_requested_at) {
+            const deleteOn = deletionDate(user);
+            if (Date.now() >= deleteOn.getTime()) {
+                return res.status(401).json({ message: 'Invalid email or password' });
+            }
+            return res.status(403).json({
+                code: 'ACCOUNT_DELETION_PENDING',
+                message: 'This account was deleted and will be permanently erased soon. You can restore it until then.',
+                delete_on: deleteOn.toISOString(),
+            });
+        }
+        await userRepository.update({ id: user.id }, activitySnapshot());
         const token = signToken(user);
         return res.status(200).json({
             message: 'Login successful',
@@ -143,6 +170,7 @@ const getProfile = async (req, res) => {
                 'business_phone',
                 'business_logo',
                 'custom_field_defs',
+                'terms_version',
                 'created_at'
             ]
         });
@@ -154,7 +182,8 @@ const getProfile = async (req, res) => {
 
         return res.status(200).json({
             message: 'Profile fetched Successfully',
-            user: { ...user, is_admin: isAdminEmail(user.email) },
+            // terms_current: the version the user must have accepted to use the app.
+            user: { ...user, is_admin: isAdminEmail(user.email), terms_current: TERMS_VERSION },
         });
     } catch (err) {
         console.error('Get profile error:', err);
@@ -328,4 +357,82 @@ const changePassword = async (req, res) => {
     }
 };
 
-module.exports = { register, login, getProfile, updateProfile, updateCustomFields, changePassword };
+const acceptTerms = async (req, res) => {
+    try {
+        const { error, value } = validate(joi.object({
+            terms_version: joi.string().valid(TERMS_VERSION).required().label('Terms version')
+                .messages({ 'any.only': 'The Terms have been updated. Please reload the page.' }),
+        }), req.body);
+        if (error) {
+            return res.status(400).json({ message: error });
+        }
+        await AppDataSource.getRepository(User).update(
+            { id: req.user.id },
+            { terms_version: value.terms_version, terms_accepted_at: new Date() },
+        );
+        return res.status(200).json({ message: 'Terms accepted', terms_version: value.terms_version });
+    } catch (err) {
+        console.error('Accept terms error:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// Starts the recovery period; the account is erased DELETION_GRACE_DAYS later
+// (services/retention.js) unless the user restores it by logging in.
+const deleteAccount = async (req, res) => {
+    try {
+        const { error, value } = validate(joi.object({
+            password: joi.string().required().label('Password'),
+        }), req.body);
+        if (error) {
+            return res.status(400).json({ message: error });
+        }
+        const userRepository = AppDataSource.getRepository(User);
+        const user = await userRepository.findOne({ where: { id: req.user.id }, select: ['id', 'password'] });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        if (!(await bcrypt.compare(value.password, user.password))) {
+            // 400, not 401: the session is valid, and clients treat 401 as "logged out".
+            return res.status(400).json({ message: 'Password is incorrect' });
+        }
+        const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+        // Also ends every session, including this one.
+        await userRepository.update({ id: user.id }, { deletion_requested_at: now, password_changed_at: now });
+        return res.status(200).json({
+            message: 'Account deleted',
+            delete_on: deletionDate({ deletion_requested_at: now }).toISOString(),
+        });
+    } catch (err) {
+        console.error('Delete account error:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// Cancels a pending deletion (same credentials as login) and logs the user in.
+const restoreAccount = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ message: 'Email and password are required' });
+        }
+        const userRepository = AppDataSource.getRepository(User);
+        const user = await userRepository.findOne({ where: { email } });
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res.status(401).json({ message: 'Invalid email or password' });
+        }
+        if (!user.deletion_requested_at || Date.now() >= deletionDate(user).getTime()) {
+            return res.status(400).json({ message: 'This account has no pending deletion to cancel' });
+        }
+        await userRepository.update({ id: user.id }, { deletion_requested_at: null, ...activitySnapshot() });
+        return res.status(200).json({ message: 'Account restored', token: signToken(user) });
+    } catch (err) {
+        console.error('Restore account error:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+module.exports = {
+    register, login, getProfile, updateProfile, updateCustomFields, changePassword,
+    acceptTerms, deleteAccount, restoreAccount,
+};

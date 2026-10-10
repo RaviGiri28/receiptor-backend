@@ -85,6 +85,12 @@ const Receipt = new EntitySchema({
             length: 20,
             default: 'saved',
         },
+        // Printed at least once (shown in History). A printed Pending receipt keeps
+        // save_type 'saved', so it is listed in both Saved Receipts and History.
+        is_printed: {
+            type: 'boolean',
+            default: false,
+        },
         created_at: {
             type: 'timestamp',
             createDate: true,

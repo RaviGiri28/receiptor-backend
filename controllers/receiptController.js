@@ -17,7 +17,7 @@ const receiptSchema = joi.object({
     ifsc_code: joi.string().max(20).optional().allow('').label('IFSC code'),
     amount: amountField.required().label('Amount'),
     date: joi.date().iso().raw().required().label('Date'),
-    transaction_id: joi.string().max(100).required().label('Transaction ID'),
+    transaction_id: joi.string().max(100).allow('').default('').label('Transaction ID'),
     reference_number: joi.string().max(100).optional().allow('').label('Reference number'),
     status: joi.string().valid('Success', 'Pending').default('Success').label('Status'),
     bank_name: joi.string().max(100).required().label('Bank name'),
@@ -36,7 +36,7 @@ const updateReceiptSchema = joi.object({
     ifsc_code: joi.string().max(20).allow('').label('IFSC code'),
     amount: amountField.label('Amount'),
     date: joi.date().iso().raw().label('Date'),
-    transaction_id: joi.string().max(100).label('Transaction ID'),
+    transaction_id: joi.string().max(100).allow('').label('Transaction ID'),
     reference_number: joi.string().max(100).allow('').label('Reference number'),
     status: joi.string().valid('Success', 'Pending').label('Status'),
     bank_name: joi.string().max(100).label('Bank name'),
@@ -108,7 +108,9 @@ const getDashboardStats = async (req, res) => {
         const pending_receipts = await receiptRepository.count({
             where: {
                 user_id: userId,
-                status: 'Pending'
+                status: 'Pending',
+                // Matches the list the dashboard card opens (Saved Receipts, Pending).
+                save_type: 'saved',
             }
         });
 
@@ -125,6 +127,15 @@ const getDashboardStats = async (req, res) => {
         console.error('Dashboard stats error:', err);
         return res.status(500).json({ message: 'Internal server error' })
     }
+};
+
+// Applied when a receipt is printed (save_type 'printed' in the request): it joins
+// History, and leaves Saved Receipts only if its status is Success. A printed Pending
+// receipt stays saved, so it is listed in both until it is reprinted as Success.
+const markPrinted = (receipt) => {
+    receipt.is_printed = true;
+    if (receipt.status === 'Pending') receipt.save_type = 'saved';
+    return receipt;
 };
 
 const createReceipt = async (req, res) => {
@@ -152,7 +163,7 @@ const createReceipt = async (req, res) => {
                 .getRawOne();
 
             const newReceipt = receiptRepository.create({
-                ...value,
+                ...(value.save_type === 'printed' ? markPrinted(value) : value),
                 user_id: userId,
                 serial_number: (parseInt(maxSerial, 10) || 0) + 1,
             });
@@ -198,8 +209,11 @@ const getAllReceipts = async (req, res) => {
             .createQueryBuilder('receipt')
             .where('receipt.user_id = :userId', { userId });
 
-        if (type) {
-            query.andWhere('receipt.save_type = :type', { type });
+        // Saved Receipts: still saved. History: printed at least once (may be in both).
+        if (type === 'saved') {
+            query.andWhere("receipt.save_type = 'saved'");
+        } else if (type === 'printed') {
+            query.andWhere('receipt.is_printed = :printed', { printed: true });
         }
         if (search) {
             const serial = /^#?\d+$/.test(search) ? parseInt(search.replace('#', ''), 10) : -1;
@@ -308,6 +322,7 @@ const updateReceipt = async (req, res) => {
             return res.status(404).json({ message: 'Receipt not found' });
         }
         Object.assign(receipt, value);
+        if (value.save_type === 'printed') markPrinted(receipt);
         const updatedReceipt = await receiptRepository.save(receipt);
         return res.status(200).json({
             message: 'Receipt updated successfully',

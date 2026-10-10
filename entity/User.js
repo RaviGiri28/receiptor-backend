@@ -74,6 +74,42 @@ const User = new EntitySchema({
             nullable:true,
             default:null,
         },
+        // Terms & Privacy Policy version the user accepted, and when (see config/legal.js).
+        terms_version:{
+            type:'varchar',
+            length:20,
+            nullable:true,
+            default:null,
+        },
+        terms_accepted_at:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
+        // Set when the user deletes their account; the account can be restored until
+        // DELETION_GRACE_DAYS later, when everything is erased (services/retention.js).
+        deletion_requested_at:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
+        // Last login / app use (updated at most once a day), for the inactivity rule.
+        last_active_at:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
+        // Inactivity emails already sent; cleared when the user comes back.
+        inactivity_notice_at:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
+        inactivity_reminder_at:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
         created_at:{
             type:'timestamp',
             createDate:true,

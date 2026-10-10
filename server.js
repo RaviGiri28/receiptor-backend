@@ -15,6 +15,8 @@ const blogRoutes = require('./routes/blogRoutes');
 const announcementRoutes = require('./routes/announcementRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const internalRoutes = require('./routes/internalRoutes');
+const { runRetention } = require('./services/retention');
 
 if (!process.env.JWT_SECRET) {
     console.error('JWT_SECRET is not set');
@@ -56,6 +58,7 @@ app.use('/api/blog', blogRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/internal', internalRoutes);
 
 app.get('/', (req, res) => {
     res.send("Backend Running");
@@ -86,6 +89,12 @@ AppDataSource.initialize().then(() => {
         console.log(`server started on port ${PORT}`);
     });
     verifyMailer();
+    // Data retention (see services/retention.js): shortly after every start, and daily
+    // while running. Render's free plan sleeps when idle, so a daily external ping of
+    // GET /api/internal/retention (cron-job.org) both wakes the server and runs it.
+    const retention = () => runRetention().catch((err) => console.error('Retention run failed:', err));
+    setTimeout(retention, 60 * 1000).unref();
+    setInterval(retention, 24 * 60 * 60 * 1000).unref();
 }).catch((err) => {
     console.error('Database connection failed', err);
     process.exit(1);

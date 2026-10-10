@@ -112,4 +112,37 @@ const sendSupportEmail = async (ticket, user) => {
     });
 };
 
-module.exports = { isConfigured, verifyMailer, sendSupportEmail };
+// Email to users needs only a sender (no SUPPORT_INBOX).
+const canEmailUsers = () => (useBrevo()
+    ? Boolean(process.env.BREVO_SENDER || process.env.SMTP_USER)
+    : Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS));
+
+// Plain-text email to a user; replies go to the support inbox when one is set.
+const sendUserEmail = async ({ to, subject, text }) => {
+    if (!canEmailUsers()) {
+        throw new Error('Email is not configured');
+    }
+    const replyTo = process.env.SUPPORT_INBOX || undefined;
+    if (useBrevo()) {
+        await brevoRequest('/smtp/email', {
+            method: 'POST',
+            body: JSON.stringify({
+                sender: { name: 'Quick Receipt', email: process.env.BREVO_SENDER || process.env.SMTP_USER },
+                to: [{ email: to }],
+                ...(replyTo && { replyTo: { email: replyTo } }),
+                subject: oneLine(subject),
+                textContent: text,
+            }),
+        });
+        return;
+    }
+    await getTransporter().sendMail({
+        from: process.env.SMTP_FROM || `"Quick Receipt" <${process.env.SMTP_USER}>`,
+        to,
+        replyTo,
+        subject: oneLine(subject),
+        text,
+    });
+};
+
+module.exports = { isConfigured, verifyMailer, sendSupportEmail, canEmailUsers, sendUserEmail };
