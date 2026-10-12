@@ -62,8 +62,28 @@ const User = new EntitySchema({
             type:'json',
             nullable:true,
         },
+        // bcrypt hash of the 4-digit app passcode (Settings), asked when the app is opened
+        // and before deleting a receipt. NULL = no passcode.
+        app_passcode:{
+            type:'varchar',
+            length:255,
+            nullable:true,
+            default:null,
+        },
         // Tokens issued before this moment are rejected (see authMiddleware).
         password_changed_at:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
+        // Forgot password: SHA-256 of the emailed one-time token, and when it stops working.
+        password_reset_token_hash:{
+            type:'varchar',
+            length:64,
+            nullable:true,
+            default:null,
+        },
+        password_reset_expires_at:{
             type:'timestamp',
             nullable:true,
             default:null,

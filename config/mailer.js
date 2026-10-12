@@ -68,18 +68,26 @@ const verifyMailer = async () => {
 // Header values must be single-line.
 const oneLine = (text) => String(text).replace(/[\r\n]+/g, ' ').trim();
 
-// Emails a support ticket to SUPPORT_INBOX; replying goes straight to the user.
+// Emails a support ticket to SUPPORT_INBOX; replying goes straight to the sender.
+// user is null for the landing page's Contact form (a visitor without an account).
 const sendSupportEmail = async (ticket, user) => {
     if (!isConfigured()) {
         throw new Error('Email is not configured');
     }
-    const subject = oneLine(`[Quick Receipt Support #${ticket.id}] ${ticket.subject} - ${user.business_name}`);
+    const subject = user
+        ? oneLine(`[Quick Receipt Support #${ticket.id}] ${ticket.subject} - ${user.business_name}`)
+        : oneLine(`[Quick Receipt Contact #${ticket.id}] ${ticket.subject} - website visitor`);
     const text = [
-        `Ticket #${ticket.id}`,
+        `Ticket #${ticket.id}${user ? '' : ' (Contact form on the landing page)'}`,
         `From: ${ticket.name} <${ticket.email}>`,
-        `Account: ${user.name} <${user.email}> (user #${user.id})`,
-        `Business: ${user.business_name}`,
-        `Phone: ${user.phone_number}`,
+        ...(user ? [
+            `Account: ${user.name} <${user.email}> (user #${user.id})`,
+            `Business: ${user.business_name}`,
+            `Phone: ${user.phone_number}`,
+        ] : [
+            'Account: none (website visitor)',
+            `Phone: ${ticket.phone || 'not given'}`,
+        ]),
         '',
         `Subject: ${ticket.subject}`,
         '',
@@ -117,8 +125,9 @@ const canEmailUsers = () => (useBrevo()
     ? Boolean(process.env.BREVO_SENDER || process.env.SMTP_USER)
     : Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS));
 
-// Plain-text email to a user; replies go to the support inbox when one is set.
-const sendUserEmail = async ({ to, subject, text }) => {
+// Email to a user: plain text, plus an optional HTML version. Replies go to the
+// support inbox when one is set.
+const sendUserEmail = async ({ to, subject, text, html }) => {
     if (!canEmailUsers()) {
         throw new Error('Email is not configured');
     }
@@ -132,6 +141,7 @@ const sendUserEmail = async ({ to, subject, text }) => {
                 ...(replyTo && { replyTo: { email: replyTo } }),
                 subject: oneLine(subject),
                 textContent: text,
+                ...(html && { htmlContent: html }),
             }),
         });
         return;
@@ -142,6 +152,7 @@ const sendUserEmail = async ({ to, subject, text }) => {
         replyTo,
         subject: oneLine(subject),
         text,
+        ...(html && { html }),
     });
 };
 

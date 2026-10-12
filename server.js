@@ -51,6 +51,23 @@ if (process.env.CORS_ORIGIN) {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Uptime monitoring (e.g. UptimeRobot every 5 minutes): its pings also keep a free Render
+// instance from sleeping. 503 when the database can't be reached, so that raises an alert too.
+app.get('/api/health', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        await Promise.race([
+            AppDataSource.query('SELECT 1'),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Database timed out')), 5000)),
+        ]);
+        res.status(200).json({ status: 'ok', database: 'up', uptime_seconds: Math.round(process.uptime()) });
+    } catch (err) {
+        console.error('Health check failed:', err.message || err);
+        res.status(503).json({ status: 'error', database: 'down' });
+    }
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/receipts', receiptRoutes);
 app.use('/api/support', supportRoutes);

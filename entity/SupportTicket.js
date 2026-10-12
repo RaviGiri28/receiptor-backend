@@ -1,6 +1,7 @@
 const { EntitySchema } = require('typeorm');
 
-// Messages from the Support page. Saved before emailing, so none are lost if email fails.
+// Messages from the Support page, and from the landing page's Contact form (no user_id).
+// Saved before emailing, so none are lost if email fails.
 const SupportTicket = new EntitySchema({
     name: 'SupportTicket',
     tableName: 'support_tickets',
@@ -11,9 +12,16 @@ const SupportTicket = new EntitySchema({
             type: 'int',
             generated: true,
         },
+        // Null for landing-page visitors without an account.
         user_id: {
             type: 'int',
-            nullable: false,
+            nullable: true,
+        },
+        // Optional, from the landing-page Contact form.
+        phone: {
+            type: 'varchar',
+            length: 20,
+            nullable: true,
         },
         name: {
             type: 'varchar',

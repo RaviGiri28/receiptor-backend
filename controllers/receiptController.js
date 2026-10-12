@@ -3,6 +3,7 @@ const Receipt = require('../entity/Receipt');
 const User = require('../entity/User');
 const joi = require('joi');
 const { validate } = require('../middleware/validation');
+const { passcodeAllows } = require('../services/passcode');
 
 // Matches the decimal(10,2) column.
 const amountField = joi.number().positive().max(99999999.99).precision(2);
@@ -25,6 +26,9 @@ const receiptSchema = joi.object({
     notes: notesField.optional().label('Notes'),
     save_type: joi.string().valid('printed', 'saved').default('saved').label('Save type'),
     is_dual_print: joi.boolean().default(false).label('Dual print'),
+    mask_account_number: joi.boolean().default(false).label('Mask account number'),
+    // Create-only: an existing receipt can never be turned into a demo one.
+    is_demo: joi.boolean().default(false).label('Demo receipt'),
     custom_fields: customFieldsField.default(null).label('Custom fields'),
 });
 
@@ -44,6 +48,7 @@ const updateReceiptSchema = joi.object({
     notes: notesField.label('Notes'),
     save_type: joi.string().valid('printed', 'saved').label('Save type'),
     is_dual_print: joi.boolean().label('Dual print'),
+    mask_account_number: joi.boolean().label('Mask account number'),
     custom_fields: customFieldsField.label('Custom fields'),
 }).min(1);
 
@@ -105,6 +110,16 @@ const getDashboardStats = async (req, res) => {
 
         const total_amount = parseFloat(totalAmountResult.total) || 0;
 
+        // Amount of receipts dated today (same day as todays_receipt).
+        const todaysAmountResult = await receiptRepository
+            .createQueryBuilder('receipt')
+            .select('SUM(receipt.amount)', 'total')
+            .where('receipt.user_id = :userId', { userId })
+            .andWhere('receipt.date = :today', { today })
+            .getRawOne();
+
+        const todays_amount = parseFloat(todaysAmountResult.total) || 0;
+
         const pending_receipts = await receiptRepository.count({
             where: {
                 user_id: userId,
@@ -120,6 +135,7 @@ const getDashboardStats = async (req, res) => {
                 total_receipts,
                 todays_receipt,
                 total_amount,
+                todays_amount,
                 pending_receipts,
             }
         });
@@ -217,14 +233,17 @@ const getAllReceipts = async (req, res) => {
         }
         if (search) {
             const serial = /^#?\d+$/.test(search) ? parseInt(search.replace('#', ''), 10) : -1;
+            // Mobiles are stored as 10 digits, so "+91 98765-43210" should match too.
+            const mobile = search.replace(/[\s-]/g, '').replace(/^(?:\+?91|0)(?=[6-9]\d{9}$)/, '');
             query.andWhere(
                 `(
           receipt.account_holder LIKE :search OR
           receipt.account_number LIKE :search OR
           receipt.transaction_id LIKE :search OR
+          receipt.customer_mobile LIKE :mobile OR
           receipt.serial_number = :serial
         )`,
-                { search: `%${escapeLike(search)}%`, serial }
+                { search: `%${escapeLike(search)}%`, mobile: `%${escapeLike(mobile)}%`, serial }
             );
         }
         if (status) {
@@ -350,6 +369,12 @@ const deleteReceipt = async (req, res) => {
             return res.status(404).json({
                 message: 'Receipt not found'
             });
+        }
+        // Users with an app passcode must enter it to delete (sent in the request body),
+        // except for the guided tour's demo receipt.
+        if (!receipt.is_demo && !(await passcodeAllows(userId, req.body && req.body.passcode))) {
+            // 400, not 401: the session is valid, and clients treat 401 as "logged out".
+            return res.status(400).json({ code: 'PASSCODE_INVALID', message: 'Wrong passcode' });
         }
         await receiptRepository.remove(receipt);
 

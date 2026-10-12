@@ -76,6 +76,17 @@ const Receipt = new EntitySchema({
             type: 'boolean',
             default: false,
         },
+        // Print and show the account number with all but its last 5 digits hidden.
+        // The full number is still stored.
+        mask_account_number: {
+            type: 'boolean',
+            default: false,
+        },
+        // Printed during the guided tour; the tour deletes it again (without the passcode).
+        is_demo: {
+            type: 'boolean',
+            default: false,
+        },
         serial_number: {
             type: 'int',
             nullable: true,

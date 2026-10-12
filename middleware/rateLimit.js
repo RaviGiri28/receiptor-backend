@@ -26,4 +26,24 @@ const supportLimiter = limiter(60, 5, 'Too many support messages. Please try aga
     keyGenerator: (req) => `user:${req.user.id}`,
 });
 
-module.exports = { loginLimiter, registerLimiter, changePasswordLimiter, supportLimiter };
+// Forgot password, per network: limits reset emails sent to any one inbox.
+const forgotPasswordLimiter = limiter(60, 5, 'Too many reset requests. Please try again in an hour.');
+
+// Reset links tried with a new password, per network (failed tries only).
+const resetPasswordLimiter = limiter(15, 10, 'Too many attempts. Try again in 15 minutes.', {
+    skipSuccessfulRequests: true,
+});
+
+// Landing-page Contact form, per network (visitors have no account).
+const contactLimiter = limiter(60, 5, 'Too many messages from this network. Please try again in an hour.');
+
+// Wrong app passcodes, per account (runs after protect): a 4-digit code must not be guessable.
+const passcodeLimiter = limiter(15, 5, 'Too many wrong passcodes. Try again in 15 minutes.', {
+    skipSuccessfulRequests: true,
+    keyGenerator: (req) => `passcode:${req.user.id}`,
+});
+
+module.exports = {
+    loginLimiter, registerLimiter, changePasswordLimiter, forgotPasswordLimiter, resetPasswordLimiter, supportLimiter,
+    contactLimiter, passcodeLimiter,
+};

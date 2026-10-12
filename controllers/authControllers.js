@@ -7,6 +7,11 @@ const jwt = require('jsonwebtoken');
 const { uploadLogo, deleteLogo } = require('../config/cloudinary');
 const { isAdminEmail } = require('../config/admin');
 const { TERMS_VERSION, DAY_MS, DELETION_GRACE_DAYS } = require('../config/legal');
+const { passcodeField, hashPasscode, getPasscodeHash } = require('../services/passcode');
+const { sendWelcomeEmail } = require('../services/welcomeEmail');
+const {
+    hashResetToken, newResetToken, sendResetEmail, sendPasswordChangedEmail,
+} = require('../services/passwordReset');
 
 const deletionDate = (user) => new Date(new Date(user.deletion_requested_at).getTime() + DELETION_GRACE_DAYS * DAY_MS);
 
@@ -92,6 +97,7 @@ const register = async (req, res) => {
             }
             throw saveErr;
         }
+        sendWelcomeEmail(savedUser);
 
         return res.status(201).json({
             message: 'User registered successfully',
@@ -100,6 +106,74 @@ const register = async (req, res) => {
     } catch (err) {
         console.error('Register error:', err);
         return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// Same answer whether or not the email has an account, so the form can't be used to find
+// out who is registered. The email is sent after responding, so timing doesn't tell either.
+const FORGOT_PASSWORD_REPLY = 'If an account exists for that email, we have sent a link to reset the password.';
+
+const forgotPassword = async (req, res) => {
+    try {
+        const { error, value } = validate(joi.object({
+            email: joi.string().trim().email().max(100).required().label('Email'),
+        }), req.body);
+        if (error) {
+            return res.status(400).json({ message: error });
+        }
+        const userRepository = AppDataSource.getRepository(User);
+        const user = await userRepository.findOne({
+            where: { email: value.email },
+            select: ['id', 'name', 'email', 'deletion_requested_at'],
+        });
+        res.status(200).json({ message: FORGOT_PASSWORD_REPLY });
+
+        // Accounts past their recovery period can't log in any more, so no reset for them.
+        if (!user || (user.deletion_requested_at && Date.now() >= deletionDate(user).getTime())) return;
+        const { token, hash, expiresAt } = newResetToken();
+        // A new request replaces any earlier link.
+        await userRepository.update({ id: user.id }, { password_reset_token_hash: hash, password_reset_expires_at: expiresAt });
+        await sendResetEmail(user, token);
+    } catch (err) {
+        console.error('Forgot password error:', err.message || err);
+        if (!res.headersSent) res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+const resetPassword = async (req, res) => {
+    try {
+        const { error, value } = validate(joi.object({
+            token: joi.string().max(200).required().label('Reset link'),
+            password: joi.string().min(6).max(72).required().label('New password'),
+        }), req.body);
+        if (error) {
+            return res.status(400).json({ message: error });
+        }
+        const userRepository = AppDataSource.getRepository(User);
+        const user = await userRepository.findOne({
+            where: { password_reset_token_hash: hashResetToken(value.token) },
+            select: ['id', 'name', 'email', 'password_reset_expires_at'],
+        });
+        if (!user || !user.password_reset_expires_at || user.password_reset_expires_at.getTime() < Date.now()) {
+            return res.status(400).json({
+                code: 'RESET_LINK_INVALID',
+                message: 'This reset link is invalid or has expired. Please ask for a new one.',
+            });
+        }
+        await userRepository.update({ id: user.id }, {
+            password: await bcrypt.hash(value.password, 10),
+            // Whole seconds, to match the JWT "iat" claim: signs out every existing session.
+            password_changed_at: new Date(Math.floor(Date.now() / 1000) * 1000),
+            password_reset_token_hash: null,
+            password_reset_expires_at: null,
+        });
+        res.status(200).json({ message: 'Your password has been reset. Please log in with your new password.' });
+
+        sendPasswordChangedEmail(user)
+            .catch((err) => console.error(`Password changed email to user #${user.id} failed:`, err.message || err));
+    } catch (err) {
+        console.error('Reset password error:', err);
+        if (!res.headersSent) res.status(500).json({ message: 'Internal server error' });
     }
 };
 
@@ -171,6 +245,7 @@ const getProfile = async (req, res) => {
                 'business_logo',
                 'custom_field_defs',
                 'terms_version',
+                'app_passcode',
                 'created_at'
             ]
         });
@@ -180,10 +255,12 @@ const getProfile = async (req, res) => {
             });
         }
 
+        // Only whether a passcode is set leaves the server, never its hash.
+        const { app_passcode, ...profile } = user;
         return res.status(200).json({
             message: 'Profile fetched Successfully',
             // terms_current: the version the user must have accepted to use the app.
-            user: { ...user, is_admin: isAdminEmail(user.email), terms_current: TERMS_VERSION },
+            user: { ...profile, has_passcode: !!app_passcode, is_admin: isAdminEmail(user.email), terms_current: TERMS_VERSION },
         });
     } catch (err) {
         console.error('Get profile error:', err);
@@ -432,7 +509,75 @@ const restoreAccount = async (req, res) => {
     }
 };
 
+// Sets the app passcode, or changes it (then the current one is required).
+const setPasscode = async (req, res) => {
+    try {
+        const { error, value } = validate(joi.object({
+            passcode: passcodeField.required().label('Passcode'),
+            current_passcode: passcodeField.label('Current passcode'),
+        }), req.body);
+        if (error) {
+            return res.status(400).json({ message: error });
+        }
+        const current = await getPasscodeHash(req.user.id);
+        if (current && !(value.current_passcode && await bcrypt.compare(value.current_passcode, current))) {
+            // 400, not 401: the session is valid, and clients treat 401 as "logged out".
+            return res.status(400).json({ message: 'Current passcode is incorrect' });
+        }
+        await AppDataSource.getRepository(User).update({ id: req.user.id }, { app_passcode: await hashPasscode(value.passcode) });
+        return res.status(200).json({ message: current ? 'Passcode changed' : 'Passcode set' });
+    } catch (err) {
+        console.error('Set passcode error:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// Removes the app passcode. Takes the account password, so it also works when the passcode is forgotten.
+const removePasscode = async (req, res) => {
+    try {
+        const { error, value } = validate(joi.object({
+            password: joi.string().required().label('Password'),
+        }), req.body);
+        if (error) {
+            return res.status(400).json({ message: error });
+        }
+        const userRepository = AppDataSource.getRepository(User);
+        const user = await userRepository.findOne({ where: { id: req.user.id }, select: ['id', 'password'] });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        if (!(await bcrypt.compare(value.password, user.password))) {
+            return res.status(400).json({ message: 'Password is incorrect' });
+        }
+        await userRepository.update({ id: user.id }, { app_passcode: null });
+        return res.status(200).json({ message: 'Passcode removed' });
+    } catch (err) {
+        console.error('Remove passcode error:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// Checks the passcode to unlock the app.
+const verifyPasscode = async (req, res) => {
+    try {
+        const { error, value } = validate(joi.object({
+            passcode: passcodeField.required().label('Passcode'),
+        }), req.body);
+        if (error) {
+            return res.status(400).json({ message: error });
+        }
+        const hash = await getPasscodeHash(req.user.id);
+        if (hash && !(await bcrypt.compare(value.passcode, hash))) {
+            return res.status(400).json({ message: 'Wrong passcode' });
+        }
+        return res.status(200).json({ message: 'Passcode correct' });
+    } catch (err) {
+        console.error('Verify passcode error:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 module.exports = {
     register, login, getProfile, updateProfile, updateCustomFields, changePassword,
-    acceptTerms, deleteAccount, restoreAccount,
+    acceptTerms, deleteAccount, restoreAccount, setPasscode, removePasscode, verifyPasscode, forgotPassword, resetPassword,
 };
