@@ -21,7 +21,7 @@ const protect = async (req, res, next) => {
         const repo = AppDataSource.getRepository(User);
         const user = await repo.findOne({
             where: { id: decoded.id },
-            select: ['id', 'email', 'password_changed_at', 'deletion_requested_at', 'last_active_at'],
+            select: ['id', 'email', 'password_changed_at', 'deletion_requested_at', 'last_active_at', 'deactivated_at'],
         });
         if (!user || user.deletion_requested_at) {
             return res.status(401).json({message: 'Invalid or expired token.'});
@@ -36,7 +36,7 @@ const protect = async (req, res, next) => {
                 .catch((err) => console.error('Could not record activity:', err.message || err));
         }
         // Email from the database, not the token, so admin checks use the current account.
-        req.user = { ...decoded, email: user.email };
+        req.user = { ...decoded, email: user.email, deactivated: !!user.deactivated_at };
         next();
     } catch (err) {
         next(err);

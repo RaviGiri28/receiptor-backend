@@ -246,6 +246,7 @@ const getProfile = async (req, res) => {
                 'custom_field_defs',
                 'terms_version',
                 'app_passcode',
+                'deactivated_at',
                 'created_at'
             ]
         });

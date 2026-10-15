@@ -5,6 +5,7 @@ const requireAdmin = require('../middleware/requireAdmin');
 const upload = require('../middleware/upload');
 const blog = require('../controllers/blogController');
 const announcements = require('../controllers/announcementController');
+const users = require('../controllers/userAdminController');
 
 // Everything here is admin only (emails listed in ADMIN_EMAILS).
 router.use(protect, requireAdmin);
@@ -21,4 +22,8 @@ router.get('/announcements', announcements.adminList);
 router.post('/announcements', announcements.adminCreate);
 router.put('/announcements/:id', announcements.adminUpdate);
 router.delete('/announcements/:id', announcements.adminDelete);
+
+// Signed-up users, and deactivating (banning) / reactivating an account.
+router.get('/users', users.list);
+router.put('/users/:id/status', users.setStatus);
 module.exports = router;

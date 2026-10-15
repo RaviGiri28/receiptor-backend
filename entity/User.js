@@ -130,6 +130,20 @@ const User = new EntitySchema({
             nullable:true,
             default:null,
         },
+        // Set by an admin to deactivate (ban) the account: the user can still log in,
+        // view and download past receipts, but cannot create or edit receipts.
+        // NULL = active.
+        deactivated_at:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
+        // When an admin last reactivated the account (drives the "reactivated" notification).
+        reactivated_at:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
         created_at:{
             type:'timestamp',
             createDate:true,
