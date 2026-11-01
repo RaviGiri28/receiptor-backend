@@ -144,6 +144,44 @@ const User = new EntitySchema({
             nullable:true,
             default:null,
         },
+        // Subscription (services/subscription.js): 'trial' or 'paid'. NULL = never had
+        // a plan (accounts made before subscriptions, until they use a coupon).
+        plan:{
+            type:'varchar',
+            length:10,
+            nullable:true,
+            default:null,
+        },
+        // Paid plan id from config/plans.js (monthly / quarterly / yearly).
+        plan_id:{
+            type:'varchar',
+            length:20,
+            nullable:true,
+            default:null,
+        },
+        plan_started_at:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
+        // Receipts can be created until this moment.
+        plan_expires_at:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
+        // Trial chosen at signup; it starts (plan_expires_at is set) on the first login.
+        trial_days_pending:{
+            type:'int',
+            nullable:true,
+            default:null,
+        },
+        // plan_expires_at the "ends in 24 hours" email was sent for (so each period gets one).
+        expiry_reminder_for:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
         created_at:{
             type:'timestamp',
             createDate:true,

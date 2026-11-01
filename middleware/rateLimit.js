@@ -15,7 +15,10 @@ const loginLimiter = limiter(15, 10, 'Too many failed login attempts. Try again 
     skipSuccessfulRequests: true,
 });
 
-const registerLimiter = limiter(60, 5, 'Too many accounts created from this network. Try again later.');
+// Only accounts actually created count, so a mistyped coupon code doesn't use up the tries.
+const registerLimiter = limiter(60, 5, 'Too many accounts created from this network. Try again later.', {
+    skipFailedRequests: true,
+});
 
 const changePasswordLimiter = limiter(15, 5, 'Too many attempts. Try again in 15 minutes.', {
     skipSuccessfulRequests: true,
@@ -43,7 +46,13 @@ const passcodeLimiter = limiter(15, 5, 'Too many wrong passcodes. Try again in 1
     keyGenerator: (req) => `passcode:${req.user.id}`,
 });
 
+// Wrong coupon codes, per account (runs after protect), so codes can't be guessed.
+const couponLimiter = limiter(15, 10, 'Too many wrong coupon codes. Try again in 15 minutes.', {
+    skipSuccessfulRequests: true,
+    keyGenerator: (req) => `coupon:${req.user.id}`,
+});
+
 module.exports = {
     loginLimiter, registerLimiter, changePasswordLimiter, forgotPasswordLimiter, resetPasswordLimiter, supportLimiter,
-    contactLimiter, passcodeLimiter,
+    contactLimiter, passcodeLimiter, couponLimiter,
 };

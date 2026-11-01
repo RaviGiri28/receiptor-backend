@@ -16,7 +16,9 @@ const announcementRoutes = require('./routes/announcementRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const internalRoutes = require('./routes/internalRoutes');
+const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const { runRetention } = require('./services/retention');
+const { runExpiryReminders } = require('./services/subscriptionReminders');
 
 if (!process.env.JWT_SECRET) {
     console.error('JWT_SECRET is not set');
@@ -76,6 +78,7 @@ app.use('/api/announcements', announcementRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/internal', internalRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 
 app.get('/', (req, res) => {
     res.send("Backend Running");
@@ -112,6 +115,10 @@ AppDataSource.initialize().then(() => {
     const retention = () => runRetention().catch((err) => console.error('Retention run failed:', err));
     setTimeout(retention, 60 * 1000).unref();
     setInterval(retention, 24 * 60 * 60 * 1000).unref();
+    // "Trial ends in 24 hours" emails: hourly while running (see services/subscriptionReminders.js).
+    const reminders = () => runExpiryReminders().catch((err) => console.error('Expiry reminders failed:', err));
+    setTimeout(reminders, 90 * 1000).unref();
+    setInterval(reminders, 60 * 60 * 1000).unref();
 }).catch((err) => {
     console.error('Database connection failed', err);
     process.exit(1);

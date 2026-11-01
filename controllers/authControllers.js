@@ -9,6 +9,10 @@ const { isAdminEmail } = require('../config/admin');
 const { TERMS_VERSION, DAY_MS, DELETION_GRACE_DAYS } = require('../config/legal');
 const { passcodeField, hashPasscode, getPasscodeHash } = require('../services/passcode');
 const { sendWelcomeEmail } = require('../services/welcomeEmail');
+const { DEFAULT_TRIAL_DAYS } = require('../config/plans');
+const {
+    SUBSCRIPTION_COLUMNS, CouponError, claimCoupon, recordRedemption, subscriptionInfo, activatePendingTrial,
+} = require('../services/subscription');
 const {
     hashResetToken, newResetToken, sendResetEmail, sendPasswordChangedEmail,
 } = require('../services/passwordReset');
@@ -42,6 +46,8 @@ const registerSchema = joi.object({
         .messages({ 'any.only': 'Please accept the Terms and Privacy Policy', 'any.required': 'Please accept the Terms and Privacy Policy' }),
     terms_version: joi.string().valid(TERMS_VERSION).required().label('Terms version')
         .messages({ 'any.only': 'The Terms have been updated. Please reload the page and accept them again.' }),
+    // Optional: a valid code gives its trial days instead of the default free trial.
+    coupon_code: joi.string().trim().max(30).allow('').label('Coupon code'),
 });
 
 const register = async (req, res) => {
@@ -50,7 +56,7 @@ const register = async (req, res) => {
         if (error) {
             return res.status(400).json({ message: error });
         }
-        const { name, email, password, phone_number, business_name, business_address, business_phone } = value;
+        const { name, email, password, phone_number, business_name, business_address, business_phone, coupon_code } = value;
 
         const userRepository = AppDataSource.getRepository(User);
         const existingUser = await userRepository.findOne({
@@ -84,13 +90,25 @@ const register = async (req, res) => {
             terms_version: TERMS_VERSION,
             terms_accepted_at: new Date(),
             last_active_at: new Date(),
+            // The trial starts on the first login (services/subscription.js).
+            trial_days_pending: DEFAULT_TRIAL_DAYS,
         });
 
         let savedUser;
         try {
-            savedUser = await userRepository.save(newUser);
+            // The coupon use is counted only if the account is really created.
+            savedUser = await AppDataSource.transaction(async (manager) => {
+                const coupon = coupon_code ? await claimCoupon(manager, coupon_code, ['signup', 'all']) : null;
+                if (coupon) newUser.trial_days_pending = coupon.trial_days;
+                const saved = await manager.getRepository(User).save(newUser);
+                if (coupon) await recordRedemption(manager, coupon, saved.id);
+                return saved;
+            });
         } catch (saveErr) {
             if (logo) await deleteLogo(logo.publicId);
+            if (saveErr instanceof CouponError) {
+                return res.status(saveErr.status).json({ code: saveErr.code, message: saveErr.message });
+            }
             // A concurrent signup with the same email got in between the check above and here.
             if (saveErr.code === 'ER_DUP_ENTRY') {
                 return res.status(409).json({ message: 'Email already registered' });
@@ -102,6 +120,7 @@ const register = async (req, res) => {
         return res.status(201).json({
             message: 'User registered successfully',
             userId: savedUser.id,
+            trial_days: savedUser.trial_days_pending,
         });
     } catch (err) {
         console.error('Register error:', err);
@@ -207,6 +226,8 @@ const login = async (req, res) => {
             });
         }
         await userRepository.update({ id: user.id }, activitySnapshot());
+        // First login after signup: the free trial starts now.
+        await activatePendingTrial(user);
         const token = signToken(user);
         return res.status(200).json({
             message: 'Login successful',
@@ -247,7 +268,8 @@ const getProfile = async (req, res) => {
                 'terms_version',
                 'app_passcode',
                 'deactivated_at',
-                'created_at'
+                'created_at',
+                ...SUBSCRIPTION_COLUMNS,
             ]
         });
         if (!user) {
@@ -257,11 +279,17 @@ const getProfile = async (req, res) => {
         }
 
         // Only whether a passcode is set leaves the server, never its hash.
-        const { app_passcode, ...profile } = user;
+        const { app_passcode, plan, plan_id, plan_started_at, plan_expires_at, trial_days_pending, ...profile } = user;
         return res.status(200).json({
             message: 'Profile fetched Successfully',
             // terms_current: the version the user must have accepted to use the app.
-            user: { ...profile, has_passcode: !!app_passcode, is_admin: isAdminEmail(user.email), terms_current: TERMS_VERSION },
+            user: {
+                ...profile,
+                has_passcode: !!app_passcode,
+                is_admin: isAdminEmail(user.email),
+                terms_current: TERMS_VERSION,
+                subscription: subscriptionInfo(user),
+            },
         });
     } catch (err) {
         console.error('Get profile error:', err);

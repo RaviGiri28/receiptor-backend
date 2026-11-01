@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { runRetention } = require('../services/retention');
+const { runExpiryReminders } = require('../services/subscriptionReminders');
 
 const router = express.Router();
 
@@ -22,6 +23,20 @@ router.get('/retention', async (req, res) => {
     } catch (err) {
         console.error('Retention run failed:', err);
         return res.status(500).json({ message: 'Retention run failed' });
+    }
+});
+
+// "Trial ends in 24 hours" emails. Ping hourly, so they go out on time even when the
+// server sleeps between requests.
+router.get('/subscription-reminders', async (req, res) => {
+    if (!fromScheduler(req)) {
+        return res.status(403).json({ message: 'Forbidden' });
+    }
+    try {
+        return res.status(200).json(await runExpiryReminders());
+    } catch (err) {
+        console.error('Expiry reminders failed:', err);
+        return res.status(500).json({ message: 'Expiry reminders failed' });
     }
 });
 

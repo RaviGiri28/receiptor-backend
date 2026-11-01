@@ -5,6 +5,8 @@ const SupportTicket = require('../entity/SupportTicket');
 const BlogPost = require('../entity/BlogPost');
 const Announcement = require('../entity/Announcement');
 const NotificationRead = require('../entity/NotificationRead');
+const Coupon = require('../entity/Coupon');
+const CouponRedemption = require('../entity/CouponRedemption');
 require('dotenv').config();
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -25,7 +27,7 @@ const AppDataSource = new DataSource({
     // and never runs in production; use the SQL files in migrations/ instead.
     synchronize: !isProduction && process.env.DB_SYNCHRONIZE === 'true',
     logging: process.env.DB_LOGGING === 'true',
-    entities: [User, Receipt, SupportTicket, BlogPost, Announcement, NotificationRead],
+    entities: [User, Receipt, SupportTicket, BlogPost, Announcement, NotificationRead, Coupon, CouponRedemption],
 });
 
 module.exports = { AppDataSource };

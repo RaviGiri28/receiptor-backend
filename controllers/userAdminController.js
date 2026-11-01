@@ -3,12 +3,16 @@ const { AppDataSource } = require('../config/db');
 const User = require('../entity/User');
 const { validate } = require('../middleware/validation');
 const { isAdminEmail } = require('../config/admin');
+const { PLANS, findPlan } = require('../config/plans');
+const { subscriptionInfo, extendedPlan } = require('../services/subscription');
+const { sendPlanStartedEmail } = require('../services/subscriptionEmails');
 
 const escapeLike = (s) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 const listQuerySchema = joi.object({
     search: joi.string().trim().max(100).allow('').label('Search'),
     status: joi.string().valid('all', 'active', 'deactivated').default('all').label('Status'),
+    plan: joi.string().valid('all', 'trial', 'paid', 'expired', 'none').default('all').label('Plan'),
     page: joi.number().integer().min(1).default(1).label('Page'),
     limit: joi.number().integer().min(1).max(100).default(20).label('Limit'),
 });
@@ -26,14 +30,28 @@ const toJson = (u) => ({
     deletion_requested_at: u.deletion_requested_at,
     receipt_count: Number(u.receipt_count) || 0,
     is_admin: isAdminEmail(u.email),
+    subscription: subscriptionInfo(u),
+    // Signed up, but hasn't logged in yet: this many trial days start on the first login.
+    trial_days_pending: u.trial_days_pending ?? null,
 });
+
+const USER_COLUMNS = `u.id, u.name, u.email, u.phone_number, u.business_name, u.business_logo, u.created_at,
+                        u.last_active_at, u.deactivated_at, u.deletion_requested_at,
+                        u.plan, u.plan_id, u.plan_started_at, u.plan_expires_at, u.trial_days_pending,
+                        (SELECT COUNT(*) FROM receipts r WHERE r.user_id = u.id AND r.is_demo = 0) AS receipt_count`;
+
+const fetchUser = async (id) => {
+    const [row] = await AppDataSource.query(`SELECT ${USER_COLUMNS} FROM users u WHERE u.id = ?`, [id]);
+    return row ? toJson(row) : null;
+};
 
 // GET /api/admin/users: every signed-up account, newest first, with receipt counts.
 const list = async (req, res, next) => {
     try {
         const { error, value } = validate(listQuerySchema, req.query);
         if (error) return res.status(400).json({ message: error });
-        const { search, status, page, limit } = value;
+        const { search, status, plan, page, limit } = value;
+        const now = new Date();
 
         const where = [];
         const params = [];
@@ -44,13 +62,20 @@ const list = async (req, res, next) => {
         }
         if (status === 'active') where.push('u.deactivated_at IS NULL');
         if (status === 'deactivated') where.push('u.deactivated_at IS NOT NULL');
+        if (plan === 'trial' || plan === 'paid') {
+            where.push('u.plan = ? AND u.plan_expires_at > ?');
+            params.push(plan, now);
+        }
+        if (plan === 'expired') {
+            where.push('u.plan IS NOT NULL AND u.plan_expires_at <= ?');
+            params.push(now);
+        }
+        if (plan === 'none') where.push('u.plan_expires_at IS NULL');
         const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
         const [rows, [{ total }], [stats]] = await Promise.all([
             AppDataSource.query(
-                `SELECT u.id, u.name, u.email, u.phone_number, u.business_name, u.business_logo, u.created_at,
-                        u.last_active_at, u.deactivated_at, u.deletion_requested_at,
-                        (SELECT COUNT(*) FROM receipts r WHERE r.user_id = u.id AND r.is_demo = 0) AS receipt_count
+                `SELECT ${USER_COLUMNS}
                  FROM users u ${whereSql}
                  ORDER BY u.created_at DESC, u.id DESC
                  LIMIT ? OFFSET ?`,
@@ -60,9 +85,12 @@ const list = async (req, res, next) => {
             AppDataSource.query(
                 `SELECT COUNT(*) AS total,
                         SUM(deactivated_at IS NOT NULL) AS deactivated,
-                        SUM(created_at >= ?) AS new_this_week
+                        SUM(created_at >= ?) AS new_this_week,
+                        SUM(plan = 'trial' AND plan_expires_at > ?) AS on_trial,
+                        SUM(plan = 'paid' AND plan_expires_at > ?) AS paid,
+                        SUM(plan IS NOT NULL AND plan_expires_at <= ?) AS expired
                  FROM users`,
-                [new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)]
+                [new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), now, now, now]
             ),
         ]);
 
@@ -75,7 +103,11 @@ const list = async (req, res, next) => {
                 deactivated: Number(stats.deactivated) || 0,
                 active: (Number(stats.total) || 0) - (Number(stats.deactivated) || 0),
                 new_this_week: Number(stats.new_this_week) || 0,
+                on_trial: Number(stats.on_trial) || 0,
+                paid: Number(stats.paid) || 0,
+                expired: Number(stats.expired) || 0,
             },
+            plans: PLANS,
         });
     } catch (err) {
         next(err);
@@ -110,20 +142,65 @@ const setStatus = async (req, res, next) => {
                 ? { deactivated_at: new Date() }
                 : { deactivated_at: null, reactivated_at: new Date() });
         }
-        const [updated] = await AppDataSource.query(
-            `SELECT u.id, u.name, u.email, u.phone_number, u.business_name, u.business_logo, u.created_at,
-                    u.last_active_at, u.deactivated_at, u.deletion_requested_at,
-                    (SELECT COUNT(*) FROM receipts r WHERE r.user_id = u.id AND r.is_demo = 0) AS receipt_count
-             FROM users u WHERE u.id = ?`,
-            [id]
-        );
         return res.json({
             message: value.deactivated ? 'Account deactivated' : 'Account reactivated',
-            user: toJson(updated),
+            user: await fetchUser(id),
         });
     } catch (err) {
         next(err);
     }
 };
 
-module.exports = { list, setStatus };
+const planSchema = joi.object({
+    // grant_paid: a paid plan (e.g. paid by cash or UPI directly), added to any time left.
+    // add_trial: extra free days. expire: ends the current trial or plan now.
+    action: joi.string().valid('grant_paid', 'add_trial', 'expire').required().label('Action'),
+    plan_id: joi.when('action', {
+        is: 'grant_paid',
+        then: joi.string().valid(...PLANS.map((p) => p.id)).required(),
+        otherwise: joi.forbidden(),
+    }).label('Plan'),
+    days: joi.when('action', {
+        is: 'add_trial',
+        then: joi.number().integer().min(1).max(365).required(),
+        otherwise: joi.forbidden(),
+    }).label('Days'),
+});
+
+// PUT /api/admin/users/:id/plan { action, plan_id?, days? }
+const setPlan = async (req, res, next) => {
+    try {
+        const id = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'Invalid user id' });
+        const { error, value } = validate(planSchema, req.body);
+        if (error) return res.status(400).json({ message: error });
+
+        const repo = AppDataSource.getRepository(User);
+        const user = await repo.findOne({ where: { id } });
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        let changes;
+        let days = null;
+        if (value.action === 'expire') {
+            if (!user.plan) return res.status(400).json({ message: 'This account has no trial or plan to end.' });
+            changes = { plan_expires_at: new Date(), trial_days_pending: null };
+        } else {
+            const plan = value.action === 'grant_paid' ? findPlan(value.plan_id) : null;
+            days = plan ? plan.days : value.days;
+            changes = extendedPlan(user, { plan: plan ? 'paid' : 'trial', days, planId: plan && plan.id });
+        }
+        await repo.update({ id }, changes);
+        if (days) sendPlanStartedEmail({ ...user, ...changes }, { days });
+
+        const messages = {
+            grant_paid: 'Paid plan activated',
+            add_trial: `${days} trial days added`,
+            expire: 'Plan ended',
+        };
+        return res.json({ message: messages[value.action], user: await fetchUser(id) });
+    } catch (err) {
+        next(err);
+    }
+};
+
+module.exports = { list, setStatus, setPlan };
