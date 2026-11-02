@@ -3,7 +3,7 @@
 
 // Bump when the Terms or Privacy Policy change materially: every user is asked to
 // accept the new version on their next visit. Must match the frontend's TERMS_VERSION.
-const TERMS_VERSION = '2026-10-11';
+const TERMS_VERSION = '2026-11-03';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

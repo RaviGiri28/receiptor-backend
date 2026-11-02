@@ -17,6 +17,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const internalRoutes = require('./routes/internalRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
+const webhookRoutes = require('./routes/webhookRoutes');
 const { runRetention } = require('./services/retention');
 const { runExpiryReminders } = require('./services/subscriptionReminders');
 
@@ -50,6 +51,9 @@ if (process.env.TRUST_PROXY) {
 if (process.env.CORS_ORIGIN) {
     app.use(cors({ origin: process.env.CORS_ORIGIN.split(',').map((o) => o.trim()) }));
 }
+
+// Before express.json(): webhook signatures are checked against the raw body.
+app.use('/api/webhooks', webhookRoutes);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

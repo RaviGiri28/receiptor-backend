@@ -3,7 +3,7 @@
 //    The trial starts on the first login (trial_days_pending until then).
 //  - Accounts made before subscriptions have plan = NULL and see a popup with the
 //    "existing users" coupon, which starts their trial from inside the app.
-//  - Paid plans are set by an admin for now (online payment comes later).
+//  - Paid plans come from a Razorpay payment (services/payment.js) or an admin.
 //  - Admins (ADMIN_EMAILS) never need a plan.
 const { AppDataSource } = require('../config/db');
 const User = require('../entity/User');

@@ -52,7 +52,11 @@ const couponLimiter = limiter(15, 10, 'Too many wrong coupon codes. Try again in
     keyGenerator: (req) => `coupon:${req.user.id}`,
 });
 
+const paymentLimiter = limiter(15, 20, 'Too many payment attempts. Try again in 15 minutes.', {
+    keyGenerator: (req) => `payment:${req.user.id}`,
+});
+
 module.exports = {
     loginLimiter, registerLimiter, changePasswordLimiter, forgotPasswordLimiter, resetPasswordLimiter, supportLimiter,
-    contactLimiter, passcodeLimiter, couponLimiter,
+    contactLimiter, passcodeLimiter, couponLimiter, paymentLimiter,
 };
