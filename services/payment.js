@@ -4,7 +4,7 @@ const Razorpay = require('razorpay');
 const { AppDataSource } = require('../config/db');
 const User = require('../entity/User');
 const Payment = require('../entity/Payment');
-const { findPlan } = require('../config/plans');
+const { findPlan } = require('./plans');
 const { extendedPlan } = require('./subscription');
 const { sendPaymentSuccessEmail } = require('./subscriptionEmails');
 
@@ -63,7 +63,7 @@ const activatePayment = async (userId, orderId, paymentId) => {
             .getOne();
         if (payment.status === 'paid') return { user, days: null, order: null };
 
-        const plan = findPlan(payment.plan_id);
+        const plan = await findPlan(payment.plan_id);
         const changes = extendedPlan(user, { plan: 'paid', days: plan.days, planId: plan.id });
         await users.update({ id: userId }, changes);
         const paidAt = new Date();

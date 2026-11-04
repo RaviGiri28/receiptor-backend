@@ -95,4 +95,28 @@ const sendPasswordChangedEmail = async (user) => {
     await sendUserEmail({ to: user.email, subject: 'Your Quick Receipt password was changed', text, html });
 };
 
-module.exports = { RESET_TOKEN_MINUTES, hashResetToken, newResetToken, sendResetEmail, sendPasswordChangedEmail };
+const sendPasswordResetByAdminEmail = async (user) => {
+    const name = firstName(user.name);
+    const loginLink = `${appUrl()}/login`;
+    const text = [
+        `Hi ${name},`,
+        '',
+        'The Quick Receipt team has reset the password for your account, and you were signed out on all devices.',
+        'We will share your new password with you directly. After logging in, please change it in your Profile.',
+        '',
+        'If you did not ask for this, reply to this email straight away so we can help.',
+        '',
+        'The Quick Receipt Team',
+    ].join('\n');
+    const html = emailHtml({
+        title: 'Your password was reset',
+        intro: `Hi ${escapeHtml(name)},<br><br>The Quick Receipt team has reset the password for your account, and you were signed out on all devices. We will share your new password with you directly. After logging in, please change it in your Profile.`,
+        button: { href: loginLink, label: 'Log in' },
+        outro: '<strong style="color:#0f1f47;">Did not ask for this?</strong> Reply to this email straight away so we can help.',
+    });
+    await sendUserEmail({ to: user.email, subject: 'Your Quick Receipt password was reset', text, html });
+};
+
+module.exports = {
+    RESET_TOKEN_MINUTES, hashResetToken, newResetToken, sendResetEmail, sendPasswordChangedEmail, sendPasswordResetByAdminEmail,
+};

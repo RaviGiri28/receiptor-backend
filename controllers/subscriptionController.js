@@ -3,7 +3,8 @@ const { AppDataSource } = require('../config/db');
 const User = require('../entity/User');
 const Coupon = require('../entity/Coupon');
 const { validate } = require('../middleware/validation');
-const { PLANS, DEFAULT_TRIAL_DAYS, findPlan } = require('../config/plans');
+const { DEFAULT_TRIAL_DAYS } = require('../config/plans');
+const { getPlans, findPlan } = require('../services/plans');
 const { CouponError, subscriptionInfo, redeemCoupon, SUBSCRIPTION_COLUMNS } = require('../services/subscription');
 const { createOrder, isValidSignature, activatePayment } = require('../services/payment');
 
@@ -32,7 +33,7 @@ const getMine = async (req, res, next) => {
         const subscription = subscriptionInfo(user);
         return res.json({
             subscription,
-            plans: PLANS,
+            plans: await getPlans(),
             offer: subscription.status === 'none' ? await existingUsersOffer() : null,
         });
     } catch (err) {
@@ -41,7 +42,13 @@ const getMine = async (req, res, next) => {
 };
 
 // GET /api/subscription/plans: public, for the pricing section of the landing page.
-const publicPlans = (req, res) => res.json({ plans: PLANS, trial_days: DEFAULT_TRIAL_DAYS });
+const publicPlans = async (req, res, next) => {
+    try {
+        return res.json({ plans: await getPlans(), trial_days: DEFAULT_TRIAL_DAYS });
+    } catch (err) {
+        next(err);
+    }
+};
 
 const redeemSchema = joi.object({
     code: joi.string().trim().min(3).max(30).required().label('Coupon code'),
@@ -71,9 +78,9 @@ const orderSchema = joi.object({
 const order = async (req, res) => {
     const { error, value } = validate(orderSchema, req.body);
     if (error) return res.status(400).json({ message: error });
-    const plan = findPlan(value.plan_id);
-    if (!plan) return res.status(400).json({ message: 'Unknown plan.' });
     try {
+        const plan = await findPlan(value.plan_id);
+        if (!plan) return res.status(400).json({ message: 'Unknown plan.' });
         return res.json(await createOrder(req.user.id, plan));
     } catch (err) {
         console.error('Razorpay order failed:', err);

@@ -5,6 +5,7 @@ const { AppDataSource } = require('../config/db');
 const { canEmailUsers, sendUserEmail } = require('../config/mailer');
 const { EXPIRY_REMINDER_HOURS } = require('../config/plans');
 const { buildExpiryReminderEmail } = require('./subscriptionEmails');
+const { getPlans } = require('./plans');
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -21,12 +22,13 @@ async function sendExpiryReminders(now = Date.now()) {
            AND deletion_requested_at IS NULL`,
         [new Date(now), new Date(now + window), new Date(now - window)]
     );
+    const monthly = users.length ? (await getPlans()).find((p) => p.months === 1) : null;
     let sent = 0;
     for (const user of users) {
         // Marked first: a crash mid-send must not email the same person every hour.
         await AppDataSource.query('UPDATE users SET expiry_reminder_for = plan_expires_at WHERE id = ?', [user.id]);
         try {
-            await sendUserEmail({ to: user.email, ...buildExpiryReminderEmail(user) });
+            await sendUserEmail({ to: user.email, ...buildExpiryReminderEmail(user, monthly && monthly.price) });
             sent++;
         } catch (err) {
             console.error(`Expiry reminder to user #${user.id} failed:`, err.message || err);

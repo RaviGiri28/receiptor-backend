@@ -3,7 +3,9 @@ const { AppDataSource } = require('../config/db');
 const User = require('../entity/User');
 const { validate } = require('../middleware/validation');
 const { isAdminEmail } = require('../config/admin');
-const { PLANS, findPlan } = require('../config/plans');
+const bcrypt = require('bcrypt');
+const { getPlans, findPlan } = require('../services/plans');
+const { sendPasswordResetByAdminEmail } = require('../services/passwordReset');
 const { subscriptionInfo, extendedPlan } = require('../services/subscription');
 const { sendPlanStartedEmail } = require('../services/subscriptionEmails');
 
@@ -107,7 +109,7 @@ const list = async (req, res, next) => {
                 paid: Number(stats.paid) || 0,
                 expired: Number(stats.expired) || 0,
             },
-            plans: PLANS,
+            plans: await getPlans(),
         });
     } catch (err) {
         next(err);
@@ -157,7 +159,7 @@ const planSchema = joi.object({
     action: joi.string().valid('grant_paid', 'add_trial', 'expire').required().label('Action'),
     plan_id: joi.when('action', {
         is: 'grant_paid',
-        then: joi.string().valid(...PLANS.map((p) => p.id)).required(),
+        then: joi.string().max(20).required(),
         otherwise: joi.forbidden(),
     }).label('Plan'),
     days: joi.when('action', {
@@ -185,7 +187,8 @@ const setPlan = async (req, res, next) => {
             if (!user.plan) return res.status(400).json({ message: 'This account has no trial or plan to end.' });
             changes = { plan_expires_at: new Date(), trial_days_pending: null };
         } else {
-            const plan = value.action === 'grant_paid' ? findPlan(value.plan_id) : null;
+            const plan = value.action === 'grant_paid' ? await findPlan(value.plan_id) : null;
+            if (value.action === 'grant_paid' && !plan) return res.status(400).json({ message: 'Unknown plan.' });
             days = plan ? plan.days : value.days;
             changes = extendedPlan(user, { plan: plan ? 'paid' : 'trial', days, planId: plan && plan.id });
         }
@@ -203,4 +206,45 @@ const setPlan = async (req, res, next) => {
     }
 };
 
-module.exports = { list, setStatus, setPlan };
+const passwordSchema = joi.object({
+    password: joi.string().min(6).max(72).required().label('New password'),
+});
+
+// PUT /api/admin/users/:id/password { password }: for a user who can't use the reset email.
+// Signs the user out everywhere and tells them by email. The password itself is never emailed.
+const resetPassword = async (req, res, next) => {
+    try {
+        const id = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'Invalid user id' });
+        const { error, value } = validate(passwordSchema, req.body);
+        if (error) return res.status(400).json({ message: error });
+
+        const repo = AppDataSource.getRepository(User);
+        const user = await repo.findOne({ where: { id }, select: ['id', 'name', 'email', 'deletion_requested_at'] });
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        // One admin must not be able to take over another admin's account.
+        if (isAdminEmail(user.email)) {
+            return res.status(400).json({ message: 'Admin passwords cannot be reset here.' });
+        }
+        if (user.deletion_requested_at) {
+            return res.status(400).json({ message: 'This account has been deleted.' });
+        }
+
+        await repo.update({ id }, {
+            password: await bcrypt.hash(value.password, 10),
+            // Whole seconds, to match the JWT "iat" claim: signs out every existing session.
+            password_changed_at: new Date(Math.floor(Date.now() / 1000) * 1000),
+            password_reset_token_hash: null,
+            password_reset_expires_at: null,
+        });
+        console.log(`Admin #${req.user.id} reset the password of user #${id}.`);
+        res.json({ message: 'Password reset' });
+
+        sendPasswordResetByAdminEmail(user)
+            .catch((err) => console.error(`Password reset email to user #${id} failed:`, err.message || err));
+    } catch (err) {
+        next(err);
+    }
+};
+
+module.exports = { list, setStatus, setPlan, resetPassword };

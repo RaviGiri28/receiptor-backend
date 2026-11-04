@@ -7,6 +7,7 @@ const blog = require('../controllers/blogController');
 const announcements = require('../controllers/announcementController');
 const users = require('../controllers/userAdminController');
 const coupons = require('../controllers/couponAdminController');
+const plans = require('../controllers/planAdminController');
 
 // Everything here is admin only (emails listed in ADMIN_EMAILS).
 router.use(protect, requireAdmin);
@@ -29,6 +30,10 @@ router.get('/users', users.list);
 router.put('/users/:id/status', users.setStatus);
 // Trials and paid plans (until online payment is added, paid plans are activated here).
 router.put('/users/:id/plan', users.setPlan);
+router.put('/users/:id/password', users.resetPassword);
+
+router.get('/plans', plans.list);
+router.put('/plans/:id', plans.update);
 
 router.get('/coupons', coupons.list);
 router.post('/coupons', coupons.create);

@@ -97,7 +97,9 @@ const buildPlanStartedEmail = (user, { days }) => {
     return { subject, text, html };
 };
 
-const buildExpiryReminderEmail = (user) => {
+// monthlyPrice: rupees, or null when no plan is monthly (the line is then left out).
+const buildExpiryReminderEmail = (user, monthlyPrice) => {
+    const price = monthlyPrice ? monthlyPrice.toLocaleString('en-IN') : null;
     const url = appUrl();
     const name = firstName(user.name);
     const until = formatDateTime(user.plan_expires_at);
@@ -109,7 +111,7 @@ const buildExpiryReminderEmail = (user) => {
         `Your ${what} ends on ${until}.`,
         'After that you can still log in and view your past receipts, but you cannot create new receipts until you choose a plan.',
         '',
-        'Plans start at Rs. 249 per month.',
+        price ? `Monthly plan: Rs. ${price}.` : null,
         url ? `Upgrade now: ${url}/?upgrade=1` : null,
         '',
         'Warm regards,',
@@ -122,8 +124,8 @@ const buildExpiryReminderEmail = (user) => {
         paragraphs: [
             `Hi ${escapeHtml(name)},`,
             `Your ${escapeHtml(what)} is ending soon. After that you can still log in and view your past receipts, but you cannot create new receipts until you choose a plan.`,
-            'Plans start at just <strong>&#8377;249 per month</strong>.',
-        ],
+            price ? `Monthly plan: <strong>&#8377;${price}</strong>.` : null,
+        ].filter(Boolean),
         highlight: { label: 'Ends on', value: until },
         button: url ? { url: `${url}/?upgrade=1`, label: 'Upgrade now' } : null,
         footer: `You are receiving this because you have a Quick Receipt account with ${user.email}.`,

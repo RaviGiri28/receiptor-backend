@@ -5,6 +5,8 @@ require('dotenv').config();
 require('reflect-metadata');
 
 const { AppDataSource } = require('../config/db');
+const Plan = require('../entity/Plan');
+const { DEFAULT_PLANS } = require('../config/plans');
 
 (async () => {
     await AppDataSource.initialize();
@@ -16,6 +18,9 @@ const { AppDataSource } = require('../config/db');
             return;
         }
         await AppDataSource.synchronize();
+        await AppDataSource.getRepository(Plan).insert(DEFAULT_PLANS.map((plan, i) => ({
+            ...plan, best_value: !!plan.best_value, sort_order: i + 1,
+        })));
         const created = await AppDataSource.query('SHOW TABLES');
         console.log('Created tables:', created.map((row) => Object.values(row)[0]).join(', '));
     } finally {
