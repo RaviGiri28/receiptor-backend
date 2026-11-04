@@ -3,7 +3,7 @@
 // change only needs an edit here.
 
 const PLANS = [
-    { id: 'monthly', name: 'Monthly', price: 249, days: 30, months: 1 },
+    { id: 'monthly', name: 'Monthly', price: 1, days: 30, months: 1 }, // TEMPORARY live payment test: restore to 249
     { id: 'quarterly', name: '3 Months', price: 699, days: 90, months: 3 },
     { id: 'yearly', name: 'Yearly', price: 2299, days: 365, months: 12, best_value: true },
 ];
