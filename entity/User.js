@@ -76,6 +76,28 @@ const User = new EntitySchema({
             nullable:true,
             default:null,
         },
+        // Single-device login: the id of the one session allowed to use the account (the
+        // "sid" claim of its token). A new login replaces it, which signs out the previous
+        // device (see authMiddleware). NULL = no login since this was introduced.
+        session_id:{
+            type:'varchar',
+            length:36,
+            nullable:true,
+            default:null,
+        },
+        // When and on what device the current session was started, shown to the device
+        // that gets signed out.
+        session_started_at:{
+            type:'timestamp',
+            nullable:true,
+            default:null,
+        },
+        session_device:{
+            type:'varchar',
+            length:100,
+            nullable:true,
+            default:null,
+        },
         // Forgot password: SHA-256 of the emailed one-time token, and when it stops working.
         password_reset_token_hash:{
             type:'varchar',

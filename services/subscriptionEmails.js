@@ -26,7 +26,7 @@ const layout = ({ preheader, icon, heading, paragraphs, highlight, button, foote
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 12px 32px -18px rgba(26,60,140,0.35);">
         <tr><td style="background:linear-gradient(135deg,#1a3c8c,#2f5fd0);background-color:#1a3c8c;padding:32px;text-align:center;">
           <div style="font-size:42px;line-height:1;">${icon}</div>
-          <div style="color:#ffffff;font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-top:14px;opacity:0.85;">Quick Receipt</div>
+          <div style="color:#ffffff;font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-top:14px;opacity:0.85;">Quick Receipt Pro</div>
           <h1 style="color:#ffffff;font-size:24px;line-height:1.3;margin:8px 0 0;">${escapeHtml(heading)}</h1>
         </td></tr>
         <tr><td style="padding:28px 32px 8px;">
@@ -43,7 +43,7 @@ const layout = ({ preheader, icon, heading, paragraphs, highlight, button, foote
         </td></tr>` : ''}
         <tr><td style="padding:0 32px 32px;font-size:15px;line-height:1.6;color:#0f1f47;">
           Questions? Just reply to this email, we are happy to help.<br><br>
-          Warm regards,<br><strong>The Quick Receipt Team</strong>
+          Warm regards,<br><strong>The Quick Receipt Pro Team</strong>
         </td></tr>
       </table>
       <p style="max-width:560px;font-size:12px;line-height:1.5;color:#8a93a6;margin:16px auto 0;text-align:center;">${escapeHtml(footer)}</p>
@@ -64,11 +64,11 @@ const buildPlanStartedEmail = (user, { days }) => {
     const until = formatDateTime(user.plan_expires_at);
     const paid = user.plan === 'paid';
     const subject = paid
-        ? `${days} days added to your Quick Receipt plan`
-        : `Your ${days}-day Quick Receipt free trial has started 🎉`;
+        ? `${days} days added to your Quick Receipt Pro plan`
+        : `Your ${days}-day Quick Receipt Pro free trial has started 🎉`;
     const intro = paid
-        ? `We have added ${days} days to your Quick Receipt plan.`
-        : `Your ${days}-day free trial of Quick Receipt is now active. Create and print as many receipts as you like.`;
+        ? `We have added ${days} days to your Quick Receipt Pro plan.`
+        : `Your ${days}-day free trial of Quick Receipt Pro is now active. Create and print as many receipts as you like.`;
     const text = [
         `Hi ${name},`,
         '',
@@ -76,10 +76,10 @@ const buildPlanStartedEmail = (user, { days }) => {
         `Your access is active until ${until}.`,
         paid ? null : 'You can upgrade to a paid plan any time with the "Upgrade now" button in the app.',
         '',
-        url ? `Open Quick Receipt: ${url}/create` : null,
+        url ? `Open Quick Receipt Pro: ${url}/create` : null,
         '',
         'Warm regards,',
-        'The Quick Receipt Team',
+        'The Quick Receipt Pro Team',
     ].filter((line) => line !== null).join('\n');
     const html = layout({
         preheader: `Active until ${until}.`,
@@ -92,7 +92,7 @@ const buildPlanStartedEmail = (user, { days }) => {
         ],
         highlight: { label: 'Active until', value: until },
         button: url ? { url: `${url}/create`, label: 'Create a receipt' } : null,
-        footer: `You are receiving this because you have a Quick Receipt account with ${user.email}.`,
+        footer: `You are receiving this because you have a Quick Receipt Pro account with ${user.email}.`,
     });
     return { subject, text, html };
 };
@@ -103,7 +103,7 @@ const buildExpiryReminderEmail = (user, monthlyPrice) => {
     const url = appUrl();
     const name = firstName(user.name);
     const until = formatDateTime(user.plan_expires_at);
-    const what = user.plan === 'paid' ? 'Quick Receipt plan' : 'Quick Receipt free trial';
+    const what = user.plan === 'paid' ? 'Quick Receipt Pro plan' : 'Quick Receipt Pro free trial';
     const subject = `Your ${what} ends in 24 hours`;
     const text = [
         `Hi ${name},`,
@@ -115,7 +115,7 @@ const buildExpiryReminderEmail = (user, monthlyPrice) => {
         url ? `Upgrade now: ${url}/?upgrade=1` : null,
         '',
         'Warm regards,',
-        'The Quick Receipt Team',
+        'The Quick Receipt Pro Team',
     ].filter((line) => line !== null).join('\n');
     const html = layout({
         preheader: `Ends on ${until}. Upgrade to keep creating receipts.`,
@@ -128,7 +128,7 @@ const buildExpiryReminderEmail = (user, monthlyPrice) => {
         ].filter(Boolean),
         highlight: { label: 'Ends on', value: until },
         button: url ? { url: `${url}/?upgrade=1`, label: 'Upgrade now' } : null,
-        footer: `You are receiving this because you have a Quick Receipt account with ${user.email}.`,
+        footer: `You are receiving this because you have a Quick Receipt Pro account with ${user.email}.`,
     });
     return { subject, text, html };
 };
@@ -147,15 +147,15 @@ const buildPaymentSuccessEmail = (user, { plan, amount, orderId, paymentId, paid
         ['Order ID', orderId],
         ['Payment ID', paymentId],
         ['Date', formatDateTime(paidAt)],
-        ['Plan', `Quick Receipt ${plan.name}`],
+        ['Plan', `Quick Receipt Pro ${plan.name}`],
         ['Duration', `${plan.days} days`],
         ['Plan active until', until],
     ];
-    const subject = `Payment successful: your Quick Receipt ${plan.name} plan is active`;
+    const subject = `Payment successful: your Quick Receipt Pro ${plan.name} plan is active`;
     const text = [
         `Hi ${name},`,
         '',
-        `Your payment of ${total} was successful and your Quick Receipt ${plan.name} plan is now active.`,
+        `Your payment of ${total} was successful and your Quick Receipt Pro ${plan.name} plan is now active.`,
         '',
         'ORDER SUMMARY',
         ...rows.map(([label, value]) => `${label}: ${value}`),
@@ -166,7 +166,7 @@ const buildPaymentSuccessEmail = (user, { plan, amount, orderId, paymentId, paid
         'Questions about this order? Reply to this email and include your Order ID.',
         '',
         'Warm regards,',
-        'The Quick Receipt Team',
+        'The Quick Receipt Pro Team',
         '',
         'This is a payment confirmation, not a tax invoice.',
     ].filter((line) => line !== null).join('\n');
@@ -184,7 +184,7 @@ const buildPaymentSuccessEmail = (user, { plan, amount, orderId, paymentId, paid
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e3e9f7;border-radius:16px;overflow:hidden;">
         <tr><td style="padding:20px 32px;border-bottom:1px solid #e9edf6;">
-          <span style="font-size:17px;font-weight:800;color:#1a3c8c;">Quick Receipt</span>
+          <span style="font-size:17px;font-weight:800;color:#1a3c8c;">Quick Receipt Pro</span>
           <span style="float:right;font-size:13px;line-height:24px;color:#5b6478;">Order confirmation</span>
         </td></tr>
         <tr><td style="background:#ecfdf5;padding:28px 32px;text-align:center;border-bottom:1px solid #d1fae5;">
@@ -213,10 +213,10 @@ const buildPaymentSuccessEmail = (user, { plan, amount, orderId, paymentId, paid
         </td></tr>` : ''}
         <tr><td style="padding:16px 32px 28px;font-size:14px;line-height:1.6;color:#0f1f47;">
           Questions about this order? Reply to this email and include your Order ID.<br><br>
-          Warm regards,<br><strong>The Quick Receipt Team</strong>
+          Warm regards,<br><strong>The Quick Receipt Pro Team</strong>
         </td></tr>
       </table>
-      <p style="max-width:560px;font-size:12px;line-height:1.5;color:#8a93a6;margin:16px auto 0;text-align:center;">This is a payment confirmation, not a tax invoice. You are receiving it because you bought a plan with your Quick Receipt account ${escapeHtml(user.email)}.</p>
+      <p style="max-width:560px;font-size:12px;line-height:1.5;color:#8a93a6;margin:16px auto 0;text-align:center;">This is a payment confirmation, not a tax invoice. You are receiving it because you bought a plan with your Quick Receipt Pro account ${escapeHtml(user.email)}.</p>
     </td></tr>
   </table>
 </body>

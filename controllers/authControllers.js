@@ -16,6 +16,7 @@ const {
 const {
     hashResetToken, newResetToken, sendResetEmail, sendPasswordChangedEmail,
 } = require('../services/passwordReset');
+const { startSession } = require('../services/session');
 
 const deletionDate = (user) => new Date(new Date(user.deletion_requested_at).getTime() + DELETION_GRACE_DAYS * DAY_MS);
 
@@ -27,8 +28,9 @@ const uploadErrorResponse = (res, err) => {
     if (err.cause) console.error('Cloudinary upload error:', err.cause.message || err.cause);
     return res.status(err.status || 502).json({ message: err.message });
 };
-const signToken = (user) => jwt.sign(
-    { id: user.id, email: user.email },
+// sid: the session id (services/session.js); only the latest login's session is accepted.
+const signToken = (user, sid) => jwt.sign(
+    { id: user.id, email: user.email, sid },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
 );
@@ -228,7 +230,8 @@ const login = async (req, res) => {
         await userRepository.update({ id: user.id }, activitySnapshot());
         // First login after signup: the free trial starts now.
         await activatePendingTrial(user);
-        const token = signToken(user);
+        // One device at a time: this login signs out the account everywhere else.
+        const token = signToken(user, await startSession(userRepository, user.id, req));
         return res.status(200).json({
             message: 'Login successful',
             token,
@@ -453,7 +456,8 @@ const changePassword = async (req, res) => {
 
         return res.status(200).json({
             message: 'Password changed successfully',
-            token: signToken(req.user),
+            // Same session id: this device stays signed in.
+            token: signToken(req.user, req.user.sid),
         });
     } catch (err) {
         console.error('Change password error', err);
@@ -531,7 +535,8 @@ const restoreAccount = async (req, res) => {
             return res.status(400).json({ message: 'This account has no pending deletion to cancel' });
         }
         await userRepository.update({ id: user.id }, { deletion_requested_at: null, ...activitySnapshot() });
-        return res.status(200).json({ message: 'Account restored', token: signToken(user) });
+        const sid = await startSession(userRepository, user.id, req);
+        return res.status(200).json({ message: 'Account restored', token: signToken(user, sid) });
     } catch (err) {
         console.error('Restore account error:', err);
         return res.status(500).json({ message: 'Internal server error' });

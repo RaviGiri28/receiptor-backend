@@ -7,7 +7,7 @@ require('dotenv').config();
 // 2. SMTP, e.g. Gmail: smtp.gmail.com / 465 / your address / a Google App Password.
 const BREVO_API = 'https://api.brevo.com/v3';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT, 10) || 465;
-const SENDER_NAME = 'Quick Receipt Support';
+const SENDER_NAME = 'Quick Receipt Pro Support';
 
 const useBrevo = () => Boolean(process.env.BREVO_API_KEY);
 
@@ -75,8 +75,8 @@ const sendSupportEmail = async (ticket, user) => {
         throw new Error('Email is not configured');
     }
     const subject = user
-        ? oneLine(`[Quick Receipt Support #${ticket.id}] ${ticket.subject} - ${user.business_name}`)
-        : oneLine(`[Quick Receipt Contact #${ticket.id}] ${ticket.subject} - website visitor`);
+        ? oneLine(`[Quick Receipt Pro Support #${ticket.id}] ${ticket.subject} - ${user.business_name}`)
+        : oneLine(`[Quick Receipt Pro Contact #${ticket.id}] ${ticket.subject} - website visitor`);
     const text = [
         `Ticket #${ticket.id}${user ? '' : ' (Contact form on the landing page)'}`,
         `From: ${ticket.name} <${ticket.email}>`,
@@ -136,7 +136,7 @@ const sendUserEmail = async ({ to, subject, text, html }) => {
         await brevoRequest('/smtp/email', {
             method: 'POST',
             body: JSON.stringify({
-                sender: { name: 'Quick Receipt', email: process.env.BREVO_SENDER || process.env.SMTP_USER },
+                sender: { name: 'Quick Receipt Pro', email: process.env.BREVO_SENDER || process.env.SMTP_USER },
                 to: [{ email: to }],
                 ...(replyTo && { replyTo: { email: replyTo } }),
                 subject: oneLine(subject),
@@ -147,7 +147,7 @@ const sendUserEmail = async ({ to, subject, text, html }) => {
         return;
     }
     await getTransporter().sendMail({
-        from: process.env.SMTP_FROM || `"Quick Receipt" <${process.env.SMTP_USER}>`,
+        from: process.env.SMTP_FROM || `"Quick Receipt Pro" <${process.env.SMTP_USER}>`,
         to,
         replyTo,
         subject: oneLine(subject),

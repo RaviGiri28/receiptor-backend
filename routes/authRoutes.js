@@ -16,6 +16,8 @@ router.post('/login', loginLimiter, login);
 router.post('/forgot-password', forgotPasswordLimiter, forgotPassword);
 router.post('/reset-password', resetPasswordLimiter, resetPassword);
 router.get('/profile', protect, getProfile);
+// Cheap check that this device's session is still the active one (see authMiddleware).
+router.get('/session', protect, (req, res) => res.status(200).json({ active: true }));
 router.put('/update-profile', protect, upload.single('business_logo'), updateProfile);
 router.put('/custom-fields', protect, updateCustomFields);
 router.put('/change-password', protect, changePasswordLimiter, changePassword);

@@ -19,12 +19,12 @@ const steps = [
 const buildWelcomeEmail = (user) => {
     const url = appUrl();
     const name = firstName(user.name);
-    const subject = `Welcome to Quick Receipt, ${name}! 🎉`;
+    const subject = `Welcome to Quick Receipt Pro, ${name}! 🎉`;
 
     const text = [
         `Hi ${name},`,
         '',
-        `Welcome to Quick Receipt! Your account for ${user.business_name} is ready, and we are really glad to have you with us.`,
+        `Welcome to Quick Receipt Pro! Your account for ${user.business_name} is ready, and we are really glad to have you with us.`,
         '',
         'Get started in three steps:',
         ...steps.map((s, i) => `${i + 1}. ${s.title}: ${s.text}`),
@@ -35,9 +35,9 @@ const buildWelcomeEmail = (user) => {
         'Questions? Just reply to this email, we are happy to help.',
         '',
         'Warm regards,',
-        'The Quick Receipt Team',
+        'The Quick Receipt Pro Team',
         '',
-        `You are receiving this because you created a Quick Receipt account with ${user.email}.`,
+        `You are receiving this because you created a Quick Receipt Pro account with ${user.email}.`,
     ].filter((line) => line !== null).join('\n');
 
     const button = url ? `
@@ -66,7 +66,7 @@ const buildWelcomeEmail = (user) => {
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 12px 32px -18px rgba(26,60,140,0.35);">
         <tr><td style="background:linear-gradient(135deg,#1a3c8c,#2f5fd0);background-color:#1a3c8c;padding:36px 32px;text-align:center;">
           <div style="font-size:44px;line-height:1;">🧾</div>
-          <div style="color:#ffffff;font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-top:14px;opacity:0.85;">Quick Receipt</div>
+          <div style="color:#ffffff;font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-top:14px;opacity:0.85;">Quick Receipt Pro</div>
           <h1 style="color:#ffffff;font-size:26px;line-height:1.25;margin:8px 0 0;">Welcome aboard, ${escapeHtml(name)}!</h1>
         </td></tr>
         <tr><td style="padding:28px 32px 8px;">
@@ -74,7 +74,7 @@ const buildWelcomeEmail = (user) => {
             Your account for <strong>${escapeHtml(user.business_name)}</strong> is ready, and we are really glad to have you with us. 🎉
           </p>
           <p style="font-size:15px;line-height:1.6;color:#5b6478;margin:0;">
-            Quick Receipt turns a pasted transaction message into a neat, printed receipt in seconds. Here is how to get started:
+            Quick Receipt Pro turns a pasted transaction message into a neat, printed receipt in seconds. Here is how to get started:
           </p>
         </td></tr>
         <tr><td style="padding:12px 32px 16px;">
@@ -88,11 +88,11 @@ const buildWelcomeEmail = (user) => {
         </td></tr>
         <tr><td style="padding:0 32px 32px;font-size:15px;line-height:1.6;color:#0f1f47;">
           Questions? Just reply to this email, we are happy to help.<br><br>
-          Warm regards,<br><strong>The Quick Receipt Team</strong>
+          Warm regards,<br><strong>The Quick Receipt Pro Team</strong>
         </td></tr>
       </table>
       <p style="max-width:560px;font-size:12px;line-height:1.5;color:#8a93a6;margin:16px auto 0;text-align:center;">
-        You are receiving this because you created a Quick Receipt account with ${escapeHtml(user.email)}.
+        You are receiving this because you created a Quick Receipt Pro account with ${escapeHtml(user.email)}.
       </p>
     </td></tr>
   </table>

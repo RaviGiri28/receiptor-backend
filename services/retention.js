@@ -37,11 +37,11 @@ const formatDate = (date) => date.toLocaleDateString('en-IN', { day: 'numeric', 
 
 const inactivityEmail = (user, deleteOn) => ({
     to: user.email,
-    subject: `Your Quick Receipt account will be deleted on ${formatDate(deleteOn)}`,
+    subject: `Your Quick Receipt Pro account will be deleted on ${formatDate(deleteOn)}`,
     text: [
         `Hello ${user.name},`,
         '',
-        `You have not used your Quick Receipt account (${user.email}) for almost ${Math.round(INACTIVITY_DAYS / 365)} years.`,
+        `You have not used your Quick Receipt Pro account (${user.email}) for almost ${Math.round(INACTIVITY_DAYS / 365)} years.`,
         `As explained in our Privacy Policy, unused accounts are deleted to protect your data.`,
         '',
         `Your account, business details and all saved receipts will be permanently deleted on ${formatDate(deleteOn)}.`,
@@ -49,7 +49,7 @@ const inactivityEmail = (user, deleteOn) => ({
         'To keep your account, simply log in before that date.',
         'If you no longer need it, you can download your receipts from the History page first, or do nothing.',
         '',
-        '- Quick Receipt',
+        '- Quick Receipt Pro',
     ].join('\n'),
 });
 

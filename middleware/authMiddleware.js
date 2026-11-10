@@ -22,13 +22,28 @@ const protect = async (req, res, next) => {
         const repo = AppDataSource.getRepository(User);
         const user = await repo.findOne({
             where: { id: decoded.id },
-            select: ['id', 'email', 'password_changed_at', 'deletion_requested_at', 'last_active_at', 'deactivated_at', ...SUBSCRIPTION_COLUMNS],
+            select: [
+                'id', 'email', 'password_changed_at', 'deletion_requested_at', 'last_active_at', 'deactivated_at',
+                'session_id', 'session_started_at', 'session_device', ...SUBSCRIPTION_COLUMNS,
+            ],
         });
         if (!user || user.deletion_requested_at) {
             return res.status(401).json({message: 'Invalid or expired token.'});
         }
         if (user.password_changed_at && Math.floor(user.password_changed_at.getTime() / 1000) > decoded.iat) {
             return res.status(401).json({message: 'Session expired. Please log in again.'});
+        }
+        // Single-device login: the account was signed in somewhere else after this token was
+        // issued. (Tokens from before this rule have no sid and are refused once the user
+        // logs in again anywhere.)
+        if (user.session_id && decoded.sid !== user.session_id) {
+            return res.status(401).json({
+                code: 'SESSION_REPLACED',
+                message: 'You were logged out because your account was signed in on another device. '
+                    + 'An account can be used on only one device at a time.',
+                signed_in_at: user.session_started_at ? user.session_started_at.toISOString() : null,
+                device: user.session_device || null,
+            });
         }
         // Remembered sessions skip the login page, so app use also counts as activity
         // for the inactivity rule (written at most once a day).
